@@ -1,0 +1,14 @@
+# SSH Keys
+*.pem
+id_*
+*.pub
+
+# Logs
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# PowerShell temp files
+*.bak
