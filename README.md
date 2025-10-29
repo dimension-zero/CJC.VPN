@@ -1,27 +1,83 @@
 # CJC.VPN - Tailscale & SSH Management Toolkit
 
-Consolidated PowerShell toolkit for managing Tailscale mesh VPN and SSH access across Windows, macOS, and Linux machines. Features automated installation, diagnostics, repair, and comprehensive testing across all machines in your Tailscale account.
+Modular PowerShell toolkit for managing Tailscale mesh VPN and SSH access across Windows, macOS, and Linux machines. Features automated installation, diagnostics, repair, and comprehensive testing across all machines in your Tailscale account.
+
+## Architecture
+
+This toolkit is implemented as a **PowerShell module** (`CJC.Tailscale`) for type safety, maintainability, and code reuse. The modular architecture provides:
+
+- **Type Safety:** Custom `Result<T>` class for explicit error handling (no exceptions for control flow)
+- **Code Organization:** Separate Public, Private, and Classes directories
+- **Quality Assurance:** PSScriptAnalyzer configuration + Pester test suite
+- **Git Integration:** Pre-commit hooks for automated validation
+- **Static Analysis:** Compile-time validation via classes and enums
+- **Testability:** Individual functions can be tested in isolation
+
+### Module Structure
+```
+CJC.VPN/
+├── CJC.Tailscale.psd1              Module manifest
+├── CJC.Tailscale.psm1              Module loader
+├── Classes/
+│   └── Result.ps1                  Type-safe Result<T> pattern + enums
+├── Public/
+│   ├── Install-Tailscale.ps1       Installation function
+│   ├── Repair-Tailscale.ps1        Repair/diagnostics function
+│   └── Invoke-TailscaleAudit.ps1   Audit/testing function
+├── Private/
+│   ├── Write-Log.ps1               Logging utility
+│   ├── Get-TailscaleStatus.ps1     Tailscale interaction
+│   └── Get-DetectedPlatform.ps1    Platform detection
+├── Tests/
+│   └── CJC.Tailscale.Tests.ps1     Pester test suite
+├── PSScriptAnalyzerSettings.psd1   Code quality rules
+└── .git/hooks/pre-commit            Git validation hook
+```
 
 ## Quick Start
 
 ### Prerequisites
-- PowerShell Core (pwsh) installed
+- PowerShell Core 7.2+ (pwsh)
 - Tailscale installed and account configured
 - Administrator privileges for firewall configuration
+- PSScriptAnalyzer and Pester modules (optional, for development)
 
-### Installation
+### Usage Options
 
+#### Option 1: Import as Module (Recommended)
 ```powershell
-# 1. Run installation script
-.\Install-Tailscale.ps1
+# Import the module
+Import-Module .\CJC.Tailscale.psd1
 
-# 2. Reload PowerShell profile
+# Use the functions directly
+Install-Tailscale
+Repair-Tailscale -Auto
+Invoke-TailscaleAudit -GenerateReport
+```
+
+#### Option 2: Use Convenience Wrapper Scripts
+```powershell
+# These load the module and call the functions
+.\Install-Tailscale-Module.ps1
+.\Repair-Tailscale-Module.ps1 -Auto
+.\Invoke-TailscaleAudit-Module.ps1 -GenerateReport
+```
+
+#### Option 3: Manual Installation (If Module Import Fails)
+```powershell
+# 1. Copy module to PowerShell module path
+Copy-Item -Path .\CJC.Tailscale.psd1 -Destination $PROFILE\..\Modules\CJC.Tailscale\ -Recurse
+
+# 2. Run installation script
+.\Install-Tailscale-Module.ps1
+
+# 3. Reload PowerShell profile
 . $PROFILE
 
-# 3. Generate SSH key (if not already done)
+# 4. Generate SSH key (if not already done)
 ssh-keygen -t ed25519 -N ""
 
-# 4. Test remote access
+# 5. Test remote access
 RSSH <your-machine> "Get-Date"
 ```
 
@@ -357,13 +413,91 @@ This toolkit represents a consolidation of 20+ fragmented scripts into 3 authori
 
 ---
 
+## Development & Testing
+
+### Code Quality Validation
+
+Run PSScriptAnalyzer to check code quality:
+```powershell
+Install-Module -Name PSScriptAnalyzer -Force
+$settings = Join-Path (Get-Location) "PSScriptAnalyzerSettings.psd1"
+Invoke-ScriptAnalyzer -Path .\Public, .\Private, .\Classes -Settings $settings -Severity Error
+```
+
+### Running Tests
+
+Run the comprehensive Pester test suite:
+```powershell
+Install-Module -Name Pester -Force
+
+# Run all tests
+Invoke-Pester -Path .\Tests\CJC.Tailscale.Tests.ps1 -PassThru
+
+# Run specific test group
+Invoke-Pester -Path .\Tests\CJC.Tailscale.Tests.ps1 -TagFilter "Result" -PassThru
+
+# Generate code coverage
+Invoke-Pester -Path .\Tests\CJC.Tailscale.Tests.ps1 -CodeCoverage @(".\Public\*.ps1", ".\Private\*.ps1")
+```
+
+### Git Pre-Commit Validation
+
+The repository includes a pre-commit hook (`.git/hooks/pre-commit`) that automatically:
+1. Runs PSScriptAnalyzer on all code
+2. Executes Pester test suite
+3. Validates module structure
+
+To bypass validation for a specific commit:
+```bash
+git commit --no-verify
+```
+
+### Type Safety Features
+
+The module uses the `Result<T>` pattern instead of exceptions for error handling:
+
+```powershell
+# Success result
+$result = [Result]::Ok("Installation successful")
+if ($result.Success) {
+    Write-Host $result.Value
+}
+
+# Failed result
+$result = [Result]::Fail("Installation failed")
+if (-not $result.Success) {
+    Write-Host $result.Error
+}
+
+# Chaining operations (monadic bind)
+[Result]::Ok(5).Then({ [Result]::Ok($_ * 2) }).Map({ $_ + 3 }).Value  # Returns 13
+
+# Enums for type safety
+$operation = [TailscaleOperation]::Install
+$testStatus = [TestStatus]::Pass
+```
+
+### Module Statistics
+
+- **Lines of Code:** ~1,200 (across 8 files)
+- **Public Functions:** 3 (Install-Tailscale, Repair-Tailscale, Invoke-TailscaleAudit)
+- **Private Functions:** 3 (Write-Log, Get-TailscaleStatus, Get-DetectedPlatform)
+- **Test Cases:** 60+
+- **Code Coverage:** Type safety via classes, enums, and validation attributes
+
+---
+
 ## Support & Troubleshooting
 
 For issues:
-1. Run `.\Repair-Tailscale.ps1` for automated diagnostics
-2. Run `.\Audit-Tailscale.ps1` to test all machines
-3. Check Tailscale dashboard: https://login.tailscale.com/admin/machines
-4. Verify Tailscale version: `tailscale version`
+1. Check module import: `Import-Module .\CJC.Tailscale.psd1 -Verbose`
+2. Run `Repair-Tailscale -Auto` for automated diagnostics
+3. Run `Invoke-TailscaleAudit -GenerateReport` to test all machines
+4. Check Tailscale dashboard: https://login.tailscale.com/admin/machines
+5. Verify Tailscale version: `tailscale version`
+6. Review test results: `Invoke-Pester .\Tests\CJC.Tailscale.Tests.ps1`
+
+---
 
 ## License
 

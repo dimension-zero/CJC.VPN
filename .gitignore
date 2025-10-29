@@ -12,6 +12,29 @@ Thumbs.db
 
 # PowerShell temp files
 *.bak
+*.tmp
+*~
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+*.sublime-project
+
+# Pester
+TestResults.xml
+
+# Build Output
+Output/
+Build/
+
+# Module Cache
+*.nupkg
+
+# Environment
+.env
+.env.local
+local.settings.json
 
 # Audit reports
 *-audit*.json
