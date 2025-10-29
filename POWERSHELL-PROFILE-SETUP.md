@@ -1,21 +1,21 @@
-# PowerShell Profile Setup: Remote Machine Shortcuts
+# PowerShell Profile Setup: Dynamic Remote SSH (RSSH)
 
-This guide explains how to set up PowerShell shortcuts for easily executing commands on remote Tailscale machines without typing SSH commands manually.
+This guide explains how to set up the RSSH function for easily executing commands on remote machines without typing SSH commands manually.
 
 ---
 
 ## What You Get
 
-After setup, you can execute remote commands like this:
+After setup, you can execute remote commands with a single function:
 
 ```powershell
-# Simple shortcut (machine-specific)
-cjc2015 winget upgrade --all --silent
-cjc2021 Get-Process
-dt2020imac ls -la
+# Hostname-based execution (auto-resolves via Tailscale or DNS)
+RSSH CJC-2015-MGMT-3 "winget upgrade --all --silent"
+RSSH cjc-2021-tech-1 Get-Process
+RSSH dt-2020-imac-001 "ls -la"
 
-# Or use the generic remote function
-remote cjc-2015-mgmt-3 "winget upgrade --all --silent"
+# Or use IP directly
+RSSH 100.91.158.121 "Get-Date"
 ```
 
 Instead of manually typing:
@@ -47,7 +47,7 @@ cd C:\Users\mathew.burkitt\source\repos\CJC\CJC.VPN
 
 ```powershell
 # Test a simple command
-cjc2015 "Get-Date"
+RSSH cjc-2015-mgmt-3 "Get-Date"
 
 # Should output:
 # Executing on cjc-2015-mgmt-3 (100.91.158.121): Get-Date
@@ -58,92 +58,101 @@ cjc2015 "Get-Date"
 
 ---
 
-## Available Machine Shortcuts
+## How RSSH Resolves Hostnames
 
-| Shortcut | Machine | Hostname | IP |
-|----------|---------|----------|-----|
-| `cjc2015` | CJC-2015-MGMT-3 | cjc-2015-mgmt-3 | 100.91.158.121 |
-| `cjc2021` | CJC-2021-TECH-1 | cjc-2021-tech-1 | 100.94.7.13 |
-| `cjcjewel` | CJC-JEWEL-VB | cjc-jewel-vb | 100.86.232.24 |
-| `dt2020res` | DT-2020-RES-1 | dt-2020-res-1 | 100.102.20.69 |
-| `dt2020imac` | DT-2020-iMac-001 | dt-2020-imac-001 | 100.112.141.18 |
+The RSSH function uses a three-step resolution process:
+
+1. **Tailscale Status**: Checks `tailscale status` for machine matching the hostname
+2. **DNS Resolution**: Uses system DNS to resolve hostname to IP
+3. **Local Domain**: Tries appending `.local` suffix for mDNS resolution
+
+This means it works with:
+- Tailscale machine names (e.g., `cjc-2015-mgmt-3`)
+- Full FQDNs (e.g., `cjc-2015-mgmt-3.example.com`)
+- IP addresses directly (e.g., `100.91.158.121`)
+- mDNS names (e.g., `cjc-2015-mgmt-3.local`)
 
 ---
 
 ## Usage Examples
 
+All examples use the `RSSH` function with hostname resolution. Hostnames are case-insensitive.
+
 ### Windows Commands
 
 ```powershell
 # Check running processes
-cjc2015 Get-Process
+RSSH cjc-2015-mgmt-3 Get-Process
 
 # Get system info
-cjc2021 systeminfo
+RSSH cjc-2021-tech-1 systeminfo
 
 # List files
-cjc2015 "dir C:\Windows"
+RSSH cjc-2015-mgmt-3 "dir C:\Windows"
 
 # Run PowerShell script
-dt2020imac "& 'C:\Scripts\update.ps1'"
+RSSH dt-2020-imac-001 "& 'C:\Scripts\update.ps1'"
 ```
 
 ### macOS/Linux Commands
 
 ```powershell
 # Check processes
-dt2020imac ps aux
+RSSH dt-2020-imac-001 ps aux
 
 # List files
-dt2020imac "ls -la /Users/mathew.burkitt"
+RSSH dt-2020-imac-001 "ls -la /Users/mathew.burkitt"
 
 # Check disk usage
-dt2020imac "du -sh ~"
+RSSH dt-2020-imac-001 "du -sh ~"
 
 # Get system uptime
-dt2020imac uptime
+RSSH dt-2020-imac-001 uptime
 ```
 
 ### Software Management
 
 ```powershell
 # Windows - Upgrade all packages
-cjc2015 winget upgrade --all --silent
+RSSH cjc-2015-mgmt-3 winget upgrade --all --silent
 
 # macOS - Upgrade Homebrew packages
-dt2020imac "brew upgrade"
+RSSH dt-2020-imac-001 "brew upgrade"
 
 # Check Windows Update status
-cjc2021 "Get-WindowsUpdate"
+RSSH cjc-2021-tech-1 "Get-WindowsUpdate"
 ```
 
 ### Network Commands
 
 ```powershell
 # Ping from remote machine
-cjc2015 "ping 8.8.8.8"
+RSSH cjc-2015-mgmt-3 "ping 8.8.8.8"
 
 # Check network config
-cjc2021 ipconfig
+RSSH cjc-2021-tech-1 ipconfig
 
 # Traceroute
-dt2020imac "traceroute google.com"
+RSSH dt-2020-imac-001 "traceroute google.com"
 ```
 
 ### System Administration
 
 ```powershell
 # Restart a machine
-cjc2015 "Restart-Computer -Force"
+RSSH cjc-2015-mgmt-3 "Restart-Computer -Force"
 
 # Install a program
-cjc2021 'winget install "Visual Studio Code"'
+RSSH cjc-2021-tech-1 'winget install "Visual Studio Code"'
 
 # Check disk space
-cjc2015 "Get-Volume"
+RSSH cjc-2015-mgmt-3 "Get-Volume"
 
 # View event logs
-cjc2021 "Get-EventLog -LogName System -Newest 10"
+RSSH cjc-2021-tech-1 "Get-EventLog -LogName System -Newest 10"
+
+# By IP address
+RSSH 100.91.158.121 "Get-Date"
 ```
 
 ---
@@ -155,9 +164,10 @@ cjc2021 "Get-EventLog -LogName System -Newest 10"
 ```
 Your Local PowerShell Session
          ↓
-   Invoke-RemoteTailscale Function
+   RSSH Function
          ↓
-   Parse hostname & command
+   Resolve Hostname
+     (Tailscale/DNS)
          ↓
    SSH over Tailscale Network
          ↓
@@ -170,6 +180,18 @@ Remote Machine (PowerShell/Shell)
 Your Local Session (displays output)
 ```
 
+### Hostname Resolution Strategy
+
+1. **Tailscale First**: Looks for hostname in `tailscale status` output (fastest for Tailscale machines)
+2. **DNS Fallback**: Uses system DNS resolver for hostnames not in Tailscale
+3. **mDNS Suffix**: Tries `.local` suffix for local network machines
+
+This three-pronged approach means RSSH works with:
+- Tailscale machine names
+- DNS-registered hostnames
+- Local mDNS (`.local`) names
+- Direct IP addresses
+
 ### Security
 
 - ✅ **SSH Key Authentication**: Uses your Ed25519 SSH key, never sends passwords
@@ -177,46 +199,43 @@ Your Local Session (displays output)
 - ✅ **Authenticated**: SSH verifies remote server's key
 - ✅ **No Agent Required**: Doesn't require special agents on remote machines
 - ✅ **Works Cross-Platform**: Windows, macOS, Linux all supported
+- ✅ **Dynamic Resolution**: No hardcoded machine names or IPs
 
 ---
 
-## Customizing Shortcuts
+## Customizing RSSH
 
-To add more machine shortcuts or change names:
+The RSSH function is fully dynamic and works with any hostname. No customization needed!
 
-1. **Edit your PowerShell profile:**
-   ```powershell
-   notepad $PROFILE
-   ```
+However, if you want to customize the SSH user or key, edit your profile:
 
-2. **Find this section:**
-   ```powershell
-   # Create shortcuts for your Tailscale machines
-   New-MachineShortcut -Name 'cjc2015' -Hostname 'cjc-2015-mgmt-3'
-   ```
+```powershell
+# Edit your PowerShell profile
+notepad $PROFILE
+```
 
-3. **Add or modify shortcuts:**
-   ```powershell
-   New-MachineShortcut -Name 'myalias' -Hostname 'actual-machine-name'
-   ```
+Find this line and modify if needed:
+```powershell
+ssh -i "$SSHKey" ... "mathew.burkitt@$ip" ...
+```
 
-4. **Save and reload:**
-   ```powershell
-   . $PROFILE
-   ```
+Change `mathew.burkitt` to your SSH username if different.
 
 ---
 
 ## Troubleshooting
 
-### "Machine not found in Tailscale network"
+### "Could not resolve hostname to an IP address"
 
 ```powershell
-# Verify machine is online
+# Check if machine is in Tailscale network
 tailscale status
 
-# Machine must appear in the list
-# Check spelling matches exactly
+# Verify hostname spelling (case-insensitive)
+RSSH cjc-2015-mgmt-3 "Get-Date"  # Should work
+
+# Try with IP directly if hostname fails
+RSSH 100.91.158.121 "Get-Date"
 ```
 
 ### "Permission denied (publickey)"
@@ -225,22 +244,25 @@ tailscale status
 # Verify SSH key exists
 ls ~/.ssh/id_ed25519
 
-# Verify SSH key is on remote machine
-remote cjc-2015-mgmt-3 "cat ~/.ssh/authorized_keys | grep $(cat ~/.ssh/id_ed25519.pub)"
+# Verify SSH key is on remote machine's authorized_keys
+RSSH cjc-2015-mgmt-3 "cat ~/.ssh/authorized_keys"
+
+# Copy your public key if missing
+type ~/.ssh/id_ed25519.pub | ssh mathew.burkitt@100.91.158.121 "cat >> ~/.ssh/authorized_keys"
 ```
 
 ### "Connection timed out"
 
 ```powershell
 # Verify machine is actually online
-tailscale status | grep cjc-2015
+tailscale status
 
-# Check Tailscale connectivity
+# Check Tailscale connectivity to machine
 tailscale ping cjc-2015-mgmt-3
 
 # Verify SSH service is running on remote
-cjc2015 "Get-Service sshd | Select-Object Status"  # Windows
-dt2020imac "sudo systemctl status ssh"  # Linux/macOS
+RSSH cjc-2015-mgmt-3 "Get-Service sshd | Select-Object Status"  # Windows
+RSSH dt-2020-imac-001 "sudo systemctl status ssh"  # Linux/macOS
 ```
 
 ### Command doesn't work on remote
@@ -249,10 +271,21 @@ Remember: **The command runs on the REMOTE machine**, not your local machine.
 
 ```powershell
 # ❌ WRONG - tries to find file locally
-cjc2015 "C:\file.txt"
+RSSH cjc-2015-mgmt-3 "C:\file.txt"
 
 # ✅ RIGHT - file path interpreted on remote
-cjc2015 "Get-Item C:\file.txt"
+RSSH cjc-2015-mgmt-3 "Get-Item C:\file.txt"
+```
+
+### SSH is taking a long time
+
+RSSH has a 5-second timeout by default. For longer operations:
+
+```powershell
+# Option 1: Run command in background on remote
+RSSH machine "Start-Process powershell -ArgumentList '-Command', 'long-running-command' -NoWait"
+
+# Option 2: Use Windows Task Scheduler or cron on the remote machine
 ```
 
 ---
@@ -263,30 +296,44 @@ cjc2015 "Get-Item C:\file.txt"
 
 ```powershell
 # Get processes from remote, filter locally
-cjc2015 Get-Process | Where-Object { $_.CPU -gt 100 }
+RSSH cjc-2015-mgmt-3 "Get-Process" | Where-Object { $_.CPU -gt 100 }
 
 # Run command on remote, save output locally
-cjc2015 "ipconfig" | Out-File ~/remote-ipconfig.txt
+RSSH cjc-2015-mgmt-3 "ipconfig" | Out-File ~/remote-ipconfig.txt
 ```
 
 ### Combining Multiple Machines
 
 ```powershell
-# Check status on all machines
-"cjc2015", "cjc2021", "dt2020imac" | ForEach-Object {
+# Check all machines
+@("cjc-2015-mgmt-3", "cjc-2021-tech-1", "dt-2020-imac-001") | ForEach-Object {
     Write-Host "Checking $_..."
-    Invoke-Expression "$_ 'Get-Process | Measure-Object'"
+    RSSH $_ "Get-Process | Measure-Object"
 }
 ```
 
 ### Running Scripts Remotely
 
 ```powershell
-# Upload and run script
-cjc2015 "Invoke-WebRequest -Uri https://example.com/script.ps1 | Invoke-Expression"
+# Download and run script
+RSSH cjc-2015-mgmt-3 "powershell -Command (Invoke-WebRequest -Uri https://example.com/script.ps1).Content | Invoke-Expression"
 
-# Or use a local script
-cjc2015 "$(cat C:\scripts\update.ps1)"
+# Or embed script in RSSH call
+RSSH cjc-2015-mgmt-3 'Get-Process | Where-Object {$_.CPU -gt 50} | Select-Object Name, CPU'
+```
+
+### Creating Reusable Remote Commands
+
+```powershell
+# Define a function that uses RSSH
+function Update-RemoteMachine {
+    param([string]$Machine)
+    RSSH $Machine "winget upgrade --all --silent"
+    RSSH $Machine "Get-HotFix | Select-Object -First 5"
+}
+
+# Use it on any machine
+Update-RemoteMachine -Machine cjc-2015-mgmt-3
 ```
 
 ---
@@ -304,7 +351,7 @@ The setup script automatically backs up your existing profile:
 
 ## Uninstalling
 
-To remove the shortcuts:
+To remove RSSH:
 
 1. **Open your profile:**
    ```powershell
@@ -313,7 +360,7 @@ To remove the shortcuts:
 
 2. **Delete the section starting with:**
    ```
-   # ========== Tailscale Remote Command Shortcuts ==========
+   # ========== Dynamic Remote SSH Function (RSSH) ==========
    ```
 
 3. **Save and reload:**
@@ -325,7 +372,9 @@ To remove the shortcuts:
 
 ## Notes
 
-- **Timeouts**: Default SSH timeout is 5 seconds. For longer operations, increase the timeout in the profile.
+- **Timeouts**: Default SSH timeout is 5 seconds (ConnectTimeout). For long-running commands, redirect output or run in background.
 - **Long-Running Commands**: For background tasks, consider using Windows Task Scheduler or Linux cron instead.
-- **Cross-Platform**: macOS and Linux versions use different paths (e.g., `ls` vs `dir`), so craft commands accordingly.
+- **Cross-Platform**: macOS and Linux use different commands (e.g., `ls` vs `dir`, `brew` vs `apt`), so craft commands accordingly.
 - **Output Encoding**: Some binary output may not display correctly. Redirect to file if needed.
+- **Hostname Flexibility**: RSSH works with Tailscale names, DNS names, mDNS names, and IP addresses - whichever resolves first.
+- **No Hardcoded Data**: RSSH is purely dynamic with no machine lists to maintain.

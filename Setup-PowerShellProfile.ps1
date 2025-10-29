@@ -1,6 +1,6 @@
 #!/usr/bin/env pwsh
-# Setup PowerShell Profile with remote machine shortcuts
-# Adds convenient commands for executing commands on Tailscale machines
+# Setup PowerShell Profile with dynamic RSSH function
+# Adds convenient remote SSH execution via Tailscale
 
 param(
     [Parameter(Mandatory=$false)]
@@ -26,83 +26,89 @@ if (-not (Test-Path $profileDir)) {
 
 # Create profile content
 $profileContent = @"
-# ========== Tailscale Remote Command Shortcuts ==========
+# ========== Dynamic Remote SSH Function (RSSH) ==========
 # Added by Setup-PowerShellProfile.ps1
+# Usage: RSSH hostname command
+# Resolves hostname to IP via DNS or Tailscale, then executes via SSH
 
-# Core function for executing remote commands via SSH
-function Invoke-RemoteTailscale {
+function RSSH {
     param(
-        [Parameter(Mandatory=`$true, Position=0)]
-        [string]`$ComputerName,
+        [Parameter(Mandatory=`$true, Position=0, HelpMessage="Hostname or machine name")]
+        [string]`$Hostname,
 
-        [Parameter(Mandatory=`$true, Position=1, ValueFromRemainingArguments=`$true)]
+        [Parameter(Mandatory=`$true, Position=1, ValueFromRemainingArguments=`$true, HelpMessage="Command to execute")]
         [string[]]`$Command
     )
 
     # Join command parts
     `$cmdString = `$Command -join ' '
 
-    # Get IP address from tailscale status
-    `$machineInfo = tailscale status | Where-Object { `$_ -like "*`$ComputerName*" }
-    if (-not `$machineInfo) {
-        Write-Error "Machine '\$ComputerName' not found in Tailscale network"
+    # Try to resolve IP address
+    `$ip = `$null
+
+    # Method 1: Try Tailscale status first (for Tailscale machines)
+    `$tailscaleStatus = @(tailscale status 2>``$null)
+    if (`$tailscaleStatus) {
+        `$machineInfo = `$tailscaleStatus | Where-Object { `$_ -like "*`$Hostname*" }
+        if (`$machineInfo) {
+            `$ip = (`$machineInfo -split '\s+')[0]
+        }
+    }
+
+    # Method 2: If not found in Tailscale, try DNS resolution
+    if (-not `$ip) {
+        try {
+            `$dnsResult = [System.Net.Dns]::GetHostAddresses(`$Hostname) 2>``$null
+            if (`$dnsResult) {
+                `$ip = `$dnsResult[0].IPAddressToString
+            }
+        }
+        catch {
+            # DNS resolution failed, try adding domain
+        }
+    }
+
+    # Method 3: Try with local domain suffix
+    if (-not `$ip) {
+        try {
+            `$fqdn = "`$Hostname.local"
+            `$dnsResult = [System.Net.Dns]::GetHostAddresses(`$fqdn) 2>``$null
+            if (`$dnsResult) {
+                `$ip = `$dnsResult[0].IPAddressToString
+                `$Hostname = `$fqdn
+            }
+        }
+        catch {
+            # Still failed
+        }
+    }
+
+    # If still no IP, error out
+    if (-not `$ip) {
+        Write-Error "Could not resolve '\$Hostname' to an IP address. Check hostname or Tailscale status."
         return
     }
 
-    `$ip = (`$machineInfo -split '\s+')[0]
-
-    Write-Host "Executing on \$ComputerName (\$ip): \$cmdString" -ForegroundColor Cyan
+    Write-Host "Executing on \$Hostname (\$ip): \$cmdString" -ForegroundColor Cyan
     Write-Host "─" * 80
 
     # Execute via SSH
-    ssh -i "$SSHKey" -o ConnectTimeout=5 "mathew.burkitt@`$ip" powershell -Command "`$cmdString"
+    ssh -i "$SSHKey" -o ConnectTimeout=5 -o StrictHostKeyChecking=no "mathew.burkitt@`$ip" powershell -Command "`$cmdString"
 
     Write-Host "─" * 80
 }
 
-# Alias for easier invocation
-Set-Alias -Name 'remote' -Value 'Invoke-RemoteTailscale' -Force
-
-# ========== Machine-Specific Shortcuts ==========
-# These make it easier to run commands on specific machines
-
-# Function to create machine shortcut
-function New-MachineShortcut {
-    param([string]`$Name, [string]`$Hostname)
-
-    `$function = @"
-        param([Parameter(ValueFromRemainingArguments=``$true)][string[]]`$Cmd)
-        Invoke-RemoteTailscale '$Hostname' `@Cmd
-    `"@
-
-    Set-Item -Path "Function:global:\$Name" -Value ([ScriptBlock]::Create(`$function)) -Force
-}
-
-# Create shortcuts for your Tailscale machines
-# Syntax: New-MachineShortcut -Name "shortcut" -Hostname "full-hostname"
-
-New-MachineShortcut -Name 'cjc2015' -Hostname 'cjc-2015-mgmt-3'
-New-MachineShortcut -Name 'cjc2021' -Hostname 'cjc-2021-tech-1'
-New-MachineShortcut -Name 'cjcjewel' -Hostname 'cjc-jewel-vb'
-New-MachineShortcut -Name 'dt2020res' -Hostname 'dt-2020-res-1'
-New-MachineShortcut -Name 'dt2020imac' -Hostname 'dt-2020-imac-001'
-
 # ========== Usage Examples ==========
 #
-# Using the generic remote function:
-#   remote cjc-2015-mgmt-3 "winget upgrade --all --silent"
-#   remote cjc-2021-tech-1 Get-Process
-#   remote dt-2020-imac-001 "ls -la"
-#
-# Using machine-specific shortcuts:
-#   cjc2015 winget upgrade --all --silent
-#   cjc2021 Get-Process
-#   dt2020imac ls -la
+# RSSH cjc-2015-mgmt-3 "winget upgrade --all --silent"
+# RSSH cjc-2021-tech-1 Get-Process
+# RSSH dt-2020-imac-001 "ls -la"
+# RSSH 100.91.158.121 "Get-Date"
 #
 # ==========================================
 
-Write-Host "Tailscale remote shortcuts loaded!" -ForegroundColor Green
-Write-Host "Usage: cjc2015 <command>  OR  remote cjc-2015-mgmt-3 <command>" -ForegroundColor Cyan
+Write-Host "Remote SSH function (RSSH) loaded!" -ForegroundColor Green
+Write-Host "Usage: RSSH <hostname> <command>" -ForegroundColor Cyan
 "@
 
 # Backup existing profile if it exists
