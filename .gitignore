@@ -12,3 +12,6 @@ Thumbs.db
 
 # PowerShell temp files
 *.bak
+
+# Audit reports
+*-audit*.json
